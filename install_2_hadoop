@@ -1,0 +1,290 @@
+#!/bin/bash
+
+source ./install_0_setup
+
+
+# be able to overwrite all the files. yay
+sudo chown ubuntu /etc/hadoop/conf.tessera/*
+
+sudo touch /etc/hadoop/conf.tessera/core-site.xml
+sudo touch /etc/hadoop/conf.tessera/mapred-site.xml
+sudo touch /etc/hadoop/conf.tessera/yarn-site.xml
+sudo touch /etc/hadoop/conf.tessera/masters
+sudo touch /etc/hadoop/conf.tessera/hdfs-site.xml
+
+sudo chown ubuntu /etc/hadoop/conf.tessera/*
+
+
+
+# Configuration
+# Hadoop’s HDFS will use space on the local disks on node002 through node005 to create a single large distributed filesystem. In our example we will say each of node002 through node005 has four 2TB drives per node, for a total of 32TB across the four servers. These local drives must be already been formatted by Linux as normal Linux filesystems (ext4, ext3, etc.). We will further say these filesystems have been mounted with the same mount point locations on all nodes: /hadoop/disk1, /hadoop/disk2, /hadoop/disk3, and /hadoop/disk4. HDFS actually permits different sized drives and different numbers of drives on each server, but doing so requires each server to have an individually maintained hdfs-site.xml file, described later. If possible, keep the number of drives the same on each node for easier administration. The names of the mount points aren’t special and could be anything, but these are the names we will use in this example. HDFS creates its own directory structure and files within the drives that are part of HDFS. If one were to look inside one of these filesystems after Hadoop is running and files have been written to HDFS, one would see a file and directory structure with computer generated directory names and filenames that don’t correspond in any way to their HDFS filenames (eg. blk_1073742354, blk_1073742354_1530.meta, etc.). Access to these files must be made through Hadoop. Paths to files in HDFS begin with ‘/’ just as they do on a normal Linux filesystem, but the namespace is completely independent from all other files on the nodes. This means the directory /tmp on HDFS is completely different from the normal /tmp visible at a bash prompt. Some paths in the configuration below are in the Linux filesystem namespace an some are in the HDFS filesystem namespace.
+#
+# The frontend server does not directly participate in Hadoop computation, HDFS storage, etc. but it must have knowledge of the Hadoop configuration in order to interact with Hadoop. Thus all Hadoop configuration files must exist on the frontend in addition to the nodeNNN servers.
+#
+# The amount of RAM per node must be known for some configuration settings, so lets say we have 64GB per node in our example configuration. We will say each node has 16 CPU cores.
+#
+
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# TO BE DONE BY SYS ADMIN!!!!!!!!!!!!
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#
+# sudo cat <<EOF >> /etc/hosts
+#
+# # tessera hadoop
+# 118.138.246.99 tessera.erc.monash.edu.au tessera
+# 118.138.246.101 tessera-wn1.erc.monash.edu.au tessera-wn1
+# 118.138.246.102 tessera-wn2.erc.monash.edu.au tessera-wn2
+# 118.138.246.103 tessera-wn3.erc.monash.edu.au tessera-wn3
+# EOF
+
+# # 10.0.0.001 node001.example.com node001
+# # 10.0.0.002 node002.example.com node002
+# # 10.0.0.003 node003.example.com node003
+# # 10.0.0.004 node004.example.com node004
+# # 10.0.0.005 node005.example.com node005
+# # 10.0.0.006 frontend.example.com frontend
+
+
+# Hadoop core-site.xml
+# The core-site.xml file is placed in /etc/hadoop/conf.tessera on every server in the cluster (nodeNNN and frontend). If a change is ever made to this config file, it must be made to that file on every node in the cluster as well.
+# sudo mkdir -p /etc/hadoop
+sudo cat <<EOF > /etc/hadoop/conf.tessera/core-site.xml
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<configuration>
+  <property>
+    <!-- This is the NameNode -->
+    <name>fs.defaultFS</name>
+    <value>hdfs://tessera.erc.monash.edu.au:8020</value>
+  </property>
+</configuration>
+EOF
+
+
+# Hadoop mapred-site.xml
+# The mapred-site.xml file in in /etc/hadoop/conf.tessera is configured to tell Hadoop we are using the MRv2 / YARN framework. This file should be copied to all servers (nodeNNN and frontend).
+
+sudo cat <<EOF > /etc/hadoop/conf.tessera/mapred-site.xml
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<configuration>
+  <property>
+    <name>mapreduce.framework.name</name>
+    <value>yarn</value>
+  </property>
+  <property>
+    <name>mapreduce.map.memory.mb</name>
+    <value>2048</value>
+  </property>
+  <property>
+    <name>mapreduce.reduce.memory.mb</name>
+    <value>2048</value>
+  </property>
+</configuration>
+EOF
+
+
+
+# Hadoop yarn-site.xml
+# The yarn-site.xml file in in /etc/hadoop/conf.tessera is used to configure Hadoop settings related to temporary storage, number of CPU cores to use per node, memory per node, etc. This file should be copied to all servers (nodeNNN and frontend). Changes to this file can have significant performance impact, such as running 16 tasks per node rather than running 2 per node. Tuning these settings optimally is beyond the scope of this guide. In our example cluster, the hardware configuration of all nodes is identical, thus the same yarn-site.xml file can be copied around to all nodes. If in your configuration you have some nodes with different amounts of RAM or different numbers of CPU cores, they must have an individually maintained and updated yarn-site.xml file with those settings configured differently.
+
+sudo cat <<'EOF' > /etc/hadoop/conf.tessera/yarn-site.xml
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<configuration>
+  <property>
+    <!-- This should match the name of the resource manager in your local deployment -->
+    <name>yarn.resourcemanager.hostname</name>
+    <value>tessera.erc.monash.edu.au</value>
+  </property>
+
+  <property>
+    <name>yarn.nodemanager.aux-services</name>
+    <value>mapreduce_shuffle</value>
+  </property>
+
+  <property>
+    <!-- How much RAM on this server can be used for Hadoop -->
+    <!-- We will use (total RAM - 2GB).  We have 32GB available, so use 26GB -->
+    <name>yarn.nodemanager.resource.memory-mb</name>
+    <value>26624</value>
+  </property>
+
+  <property>
+    <!-- How many CPU cores on this server can be used for Hadoop -->
+    <!-- We will use them all, which is 4 per node in our example cluster -->
+    <name>yarn.nodemanager.resource.cpu-vcores</name>
+    <value>4</value>
+  </property>
+
+  <property>
+    <name>yarn.nodemanager.aux-services.mapreduce_shuffle.class</name>
+    <value>org.apache.hadoop.mapred.ShuffleHandler</value>
+  </property>
+
+  <property>
+    <name>yarn.resourcemanager.scheduler.class</name>
+    <value>org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FairScheduler</value>
+  </property>
+
+  <property>
+    <name>yarn.log-aggregation-enable</name>
+    <value>true</value>
+  </property>
+
+  <property>
+    <!-- List of directories to store temporary localized files. -->
+    <!-- Spread these across all local drives on all nodes -->
+    <name>yarn.nodemanager.local-dirs</name>
+    <!-- <value>file:///mnt/hadoop/disk1/yarn/local,file:///mnt/hadoop/disk2/yarn/local, -->
+    <!--        file:///mnt/hadoop/disk3/yarn/local,file:///mnt/hadoop/disk4/yarn/local</value> -->
+    <value>file:///mnt/hadoop/disk1/yarn/local</value>
+  </property>
+
+  <property>
+    <!-- Where to store temporary container logs. -->
+    <!-- Spread these across all local drives on all nodes -->
+    <name>yarn.nodemanager.log-dirs</name>
+    <!-- <value>file:///mnt/hadoop/disk1/yarn/log,file:///mnt/hadoop/disk2/yarn/log, -->
+    <!--        file:///mnt/hadoop/disk3/yarn/log,file:///mnt/hadoop/disk4/yarn/log</value> -->
+    <value>file:///mnt/hadoop/disk1/yarn/log</value>
+  </property>
+
+  <property>
+    <!-- This should match the name of the NameNode in your local deployment -->
+    <name>yarn.nodemanager.remote-app-log-dir</name>
+    <value>hdfs://tessera.erc.monash.edu.au/var/log/hadoop-yarn/apps</value>
+  </property>
+
+  <property>
+    <name>yarn.application.classpath</name>
+    <value>
+       $HADOOP_CONF_DIR,
+       $HADOOP_COMMON_HOME/*,$HADOOP_COMMON_HOME/lib/*,
+       $HADOOP_HDFS_HOME/*,$HADOOP_HDFS_HOME/lib/*,
+       $HADOOP_MAPRED_HOME/*,$HADOOP_MAPRED_HOME/lib/*,
+       $HADOOP_YARN_HOME/*,$HADOOP_YARN_HOME/lib/*
+    </value>
+  </property>
+</configuration>
+EOF
+
+
+# Hadoop secondary namenode file masters
+# The file /etc/hadoop/conf.tessera/masters must contain the hostname of the secondary namenode. This file should be copied to all servers. For our example, it contains just one line:
+# sudo cat <<EOF > /etc/hadoop/conf.tessera/masters
+# tessera-wn1.erc.monash.edu.au
+# EOF
+sudo cat <<EOF > /etc/hadoop/conf.tessera/masters
+$monashNamenode.erc.monash.edu.au
+EOF
+
+if [ `hostname` = "$monashNamenode" ]
+then
+  sudo cp ./monash_slaves > /etc/hadoop/conf.tessera/slaves
+fi
+
+# Hadoop hdfs-site.xml
+# The hdfs-site.xml file is used to configure the Hadoop file system (HDFS). This file should be copied to the /etc/hadoop/conf.tessera directory on all nodes (nodeNNN and frontend). As with yarn-site.xml, if your number of disks and size of disk varies among nodes, you must independently maintain copies of hdfs-site.xml on each node.
+
+sudo cat <<EOF > /etc/hadoop/conf.tessera/hdfs-site.xml
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<configuration>
+  <property>
+    <!--  Number of times each HDFS block is replicated.  Default is 3. -->
+    <name>dfs.replication</name>
+    <value>3</value>
+  </property>
+
+  <property>
+    <!-- Size in bytes of each HDFS block.  Should be a power of 2. -->
+    <!--  We use 2^27 -->
+    <name>dfs.blocksize</name>
+    <value>134217728</value>
+  </property>
+
+  <!-- Where the namenode stores HDFS metadata on its local drives -->
+  <!-- These are Linux filesystem paths that must already exist. -->
+  <property>
+    <name>dfs.namenode.name.dir</name>
+    <!-- <value>file:///mnt/hadoop/disk1/dfs/nn,file:///mnt/hadoop/disk2/dfs/nn, -->
+    <!--       file:///mnt/hadoop/disk3/dfs/nn,file:///mnt/hadoop/disk4/dfs/nn</value> -->
+    <value>file:///mnt/hadoop/disk1/dfs/nn</value>
+  </property>
+
+  <!-- Where the secondary namenode stores HDFS metadata on its local drives -->
+  <!-- These are Linux filesystem paths that must already exist. -->
+  <property>
+    <name>dfs.namenode.checkpoint.dir</name>
+    <!-- <value>file:///mnt/hadoop/disk1/dfs/nn,file:///mnt/hadoop/disk2/dfs/nn, -->
+    <!--        file:///mnt/hadoop/disk3/dfs/nn,file:///mnt/hadoop/disk4/dfs/nn</value> -->
+    <value>file:///mnt/hadoop/disk1/dfs/nn</value>
+  </property>
+
+  <property>
+    <!-- Where each datanode stores HDFS blocks on its local drives. -->
+    <!-- These are Linux filesystem paths that must already exist. -->
+    <name>dfs.datanode.data.dir</name>
+    <!-- <value>file:///mnt/hadoop/disk1/dfs/dn,file:///mnt/hadoop/disk2/dfs/dn, -->
+    <!--        file:///mnt/hadoop/disk3/dfs/dn,file:///mnt/hadoop/disk4/dfs/dn</value> -->
+    <value>file:///mnt/hadoop/disk1/dfs/dn</value>
+  </property>
+
+  <property>
+    <!-- This should match the name of the NameNode in your local deployment -->
+    <name>dfs.namenode.http-address</name>
+    <value>tessera.erc.monash.edu.au:50070</value>
+  </property>
+
+  <property>
+     <name>dfs.permissions.superusergroup</name>
+     <value>hadoop</value>
+  </property>
+  <property>
+    <name>dfs.client.read.shortcircuit</name>
+    <value>true</value>
+  </property>
+  <property>
+    <name>dfs.client.read.shortcircuit.streams.cache.size</name>
+    <value>1000</value>
+  </property>
+  <property>
+    <name>dfs.client.read.shortcircuit.streams.cache.expiry.ms</name>
+    <value>10000</value>
+  </property>
+
+  <property>
+    <!-- Leave the dn._PORT as is, do not try to make this a number -->
+    <name>dfs.domain.socket.path</name>
+    <value>/var/run/hadoop-hdfs/dn._PORT</value>
+  </property>
+</configuration>
+EOF
+
+# We must pre-create the local metadata storage directories on the NameNode (node001), and on the Secondary NameNode (node002):
+if [ `hostname` = "$monashNamenode" ]
+then
+  sudo mkdir -p /mnt/hadoop/disk1/dfs/nn
+elif [ `hostname` = "$monashSecondaryNamenode" ]
+then
+  sudo mkdir -p /mnt/hadoop/disk1/dfs/nn
+fi
+
+if [ `hostname` = "$monashFrontend" ]
+then
+  echo "do nothing" > /dev/null
+else
+  sudo mkdir -p /mnt/hadoop/disk1/dfs/dn
+  sudo chown -R hdfs.hdfs /mnt/hadoop/disk1/dfs
+  sudo chmod 700 /mnt/hadoop/disk1/dfs
+
+  # We must pre-create the local storage directories on the datanodes, node002 through node005:
+  sudo mkdir -p /mnt/hadoop/disk1/yarn/local
+  sudo mkdir -p /mnt/hadoop/disk1/yarn/log
+  sudo chown -R yarn.yarn /mnt/hadoop/disk1/yarn/local
+  sudo chown -R yarn.yarn /mnt/hadoop/disk1/yarn/log
+fi
+
+
+# wait unti all have finished up to here

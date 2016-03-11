@@ -1,0 +1,683 @@
+#!/bin/bash
+# install script
+
+# Perform in install dir
+mkdir z_install
+cd z_install
+
+
+# Installation
+# Some packages need only be installed on the Hadoop nodes, some need only be installed on the frontend server, and some must be installed on both. This is specified on a per-package basis below. This guide is command line friendly.
+
+# System Update (all servers)
+# First update all currently installed system packages.
+sudo apt-get update
+sudo apt-get upgrade -y
+
+# pkg-config (all servers)
+# (http://www.freedesktop.org/wiki/Software/pkg-config/)
+# Following the system update, pkg-config is installed.
+sudo apt-get install -y pkg-config
+
+# Java (all servers)
+# (http://www.java.com/en/)
+# A Java repository for Sun/Oracle Java is first added to the Ubuntu APT package management system.
+sudo apt-get install -y python-software-properties
+sudo add-apt-repository -y ppa:webupd8team/java
+# The system repository store is updated and Java is installed.
+sudo apt-get update
+
+# auto accept the license
+echo debconf shared/accepted-oracle-license-v1-1 select true | sudo debconf-set-selections
+echo debconf shared/accepted-oracle-license-v1-1 seen true | sudo debconf-set-selections
+sudo apt-get install -y oracle-java7-installer
+
+# Protocol Buffers (all servers)
+# (https://code.google.com/p/protobuf/)
+# Install Protocol Buffers version 2.5.0. It is important that version 2.5.0 be installed and not a newer or older version. Ubuntu 14.04 should have version 2.5.0 available by default. Confirm this first by installing the aptitude package manager and ensuring it is version 2.5.0:
+
+sudo apt-get install -y aptitude
+aptitude show protobuf-compiler | grep Version
+
+# If it says it is version 2.5.0-something, then proceed to install it via:
+sudo apt-get install -y protobuf-compiler protobuf-c-compiler libprotobuf-dev
+
+# # If it does NOT say it is version 2.5.0-something, then manually install it. First cd to a directory the software can be downloaded and built, and type the following:
+#   # Only install manually if the steps above did not say version 2.5.0-something
+#   sudo apt-get install libtool
+#   wget https://github.com/google/protobuf/archive/v2.5.0.zip
+#   unzip v2.5.0.zip
+#   cd protobuf-2.5.0
+#   ./autogen.sh
+#   ./configure --prefix=/usr/local
+#   make
+#   sudo make install
+
+# Hadoop (all servers)
+# (http://www.cloudera.com/content/cloudera/en/products-and-services/cdh.html)
+# We use the Hadoop distribution built by Cloudera. It is a Hadoop MRv2 / YARN implementation. Download the Cloudera repository update package and install it. This will add the Cloudera package repository and repository key to the Ubuntu repositories searched when installing packages:
+wget http://archive.cloudera.com/cdh5/one-click-install/trusty/amd64/cdh5-repository_1.0_all.deb
+sudo dpkg -i cdh5-repository_1.0_all.deb
+sudo apt-get update
+
+
+
+# !!!!!!!!!!!!!!!!!!!
+# We install different packages on each node based on the Hadoop roles taken by that node. Note that when these installs complete you will see warnings such as “Failed to start Hadoop namenode. Return value: 1”. This is because we have not yet completed the configuration of these packages so the initial attempt to launch them will fail.
+# !!!!!!!!!!!!!!!!!!!
+
+frontend='tessera'
+namenode='tessera-wn1'
+secondaryNamenode='tessera-wn2'
+
+if [ `hostname` = "$monashFrontend" ]
+then
+  # frontend.example.com (doesn’t run any hadoop services, but needs the hadoop commands):
+  sudo apt-get install -y hadoop-client
+elif [ `hostname` = "$monashNamenode" ]
+then
+  # sudo apt-get install -y hadoop-yarn-resourcemanager hadoop-hdfs-namenode hadoop-client
+  sudo apt-get install -y hadoop-yarn-resourcemanager hadoop-hdfs-namenode hadoop-client
+  sudo apt-get install -y hadoop-yarn-nodemanager hadoop-hdfs-datanode hadoop-mapreduce
+elif [ `hostname` = "$monashSecondaryNamenode" ]
+then
+  sudo apt-get install -y hadoop-yarn-nodemanager hadoop-hdfs-secondarynamenode hadoop-hdfs-datanode hadoop-mapreduce
+else
+  echo "tessera-wn#!"
+  # tessera-wn2.erc.monash.edu:
+  # tessera-wn3.erc.monash.edu:
+  sudo apt-get install -y hadoop-yarn-nodemanager hadoop-hdfs-datanode hadoop-mapreduce
+fi
+
+
+# As part of the above steps, three new users and groups named yarn, hdfs, and mapred will be added to the system. All three users are added to the new group hadoop.
+
+# Configuration of Hadoop settings is done in another section, but for now we will prepare the configuration directory and set it as the default Hadoop configuration on the system. On each of node001 through node005, and on the frontend execute the following. We choose the configuration directory name of “conf.tessera” in this guide:
+
+sudo cp -r /etc/hadoop/conf.empty /etc/hadoop/conf.tessera
+sudo update-alternatives --install /etc/hadoop/conf hadoop-conf /etc/hadoop/conf.tessera 50
+sudo update-alternatives --set hadoop-conf /etc/hadoop/conf.tessera
+
+
+# Add Hadoop environment variables and an updated path to the user environment for future logins. This assumes users use an sh/ksh/bash/zsh based login shell.
+
+echo "export HADOOP=/usr/lib/hadoop
+export HADOOP_HOME=\$HADOOP
+export HADOOP_BIN=\$HADOOP/bin
+export HADOOP_LIB=\$HADOOP/lib
+export HADOOP_LIBS=\`hadoop classpath | tr -d \\*\`
+export HADOOP_CONF_DIR=/etc/hadoop/conf.tessera
+export HADOOP_COMMON_HOME=/usr/lib/hadoop
+export HADOOP_MAPRED_HOME=/usr/lib/hadoop-mapreduce
+export HADOOP_HDFS_HOME=/usr/lib/hadoop-hdfs
+export YARN_HOME=/usr/lib/hadoop-yarn
+export PATH=\$PATH:\$HADOOP_BIN" |
+sudo bash -c "cat > /etc/profile.d/hadoop.sh"
+
+
+
+# R (all nodes)
+# (http://cran.r-project.org/)
+# R is installed and configured to know about Java.
+
+# https://pythonandr.wordpress.com/2015/04/27/upgrading-to-r-3-2-0-on-ubuntu/
+codename=$(lsb_release -c -s)
+echo "deb https://cran.rstudio.com/bin/linux/ubuntu $codename/" | sudo tee -a /etc/apt/sources.list > /dev/null
+
+# Also, the Ubuntu archives on CRAN are signed with the key of Michael Rutter <marutter@gmail> with key ID E084DAB9
+sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys E084DAB9
+sudo add-apt-repository -y ppa:marutter/rdev
+sudo apt-get update
+sudo apt-get upgrade -y
+
+sudo apt-get install -y r-base r-base-dev r-recommended r-cran-rodbc
+
+sudo echo "" >> .bashrc
+sudo echo "export LD_LIBRARY_PATH=$JAVA_LD_LIBRARY_PATH" >> .bashrc
+
+sudo R CMD javareconf
+
+
+# rJava (all nodes)
+# (http://www.rforge.net/rJava/)
+# rJava is also required by RHIPE. It is installed by:
+sudo apt-get install -y r-cran-rjava
+
+
+# RHIPE (all nodes)
+# (http://www.tessera.io/)
+# RHIPE is downloaded and installed.
+# wget http://ml.stat.purdue.edu/rhipebin/Rhipe_0.75.0_cdh5mr2.tar.gz
+wget http://packages.tessera.io/src/contrib/Rhipe_0.75.2.tar.gz
+sudo R CMD INSTALL Rhipe_0.75.2.tar.gz
+
+# OpenSSL (all nodes)
+# (https://www.openssl.org/)
+# OpenSSL package is required by the Github installer/package handler for R.
+sudo apt-get install -y libcurl4-openssl-dev
+
+
+# datadr and trelliscope support packages (all nodes)
+# (http://cran.r-project.org/web/packages/available_packages_by_name.html)
+# R packages - codetools, latttice, MASS, ggplot2, boot, shiny and devtools are needed for trelliscope and datadr. They are installed using the R internal package installer install.packages. Use the command line to enter the following commands.
+sudo apt-get install -y r-cran-codetools r-cran-mass r-cran-ggplot2 r-cran-lattice r-cran-boot
+sudo R -e "install.packages('RCurl', repos='http://cran.rstudio.com/')"
+sudo R -e "install.packages('shiny', repos='http://cran.rstudio.com/')"
+sudo R -e "install.packages('devtools', repos='http://cran.rstudio.com/')"
+
+# datadr and trelliscope (all nodes)
+# (http://www.tessera.io)
+# datadr and trelliscope are installed using install_github package from R.
+sudo R -e "options(repos = 'http://cran.rstudio.com/'); library(devtools); install_github('tesseradata/datadr')"
+sudo R -e "options(repos = 'http://cran.rstudio.com/'); library(devtools); install_github('tesseradata/trelliscope')"
+
+
+if [ `hostname` = "$monashFrontend" ]
+then
+  # gdebi-core (frontend server)
+  # (https://apps.ubuntu.com/cat/applications/precise/gdebi/)
+  # gdebi is a deb package installer. It automatically resolves and installs library dependencies.
+  sudo apt-get install -y gdebi-core
+
+  # Shiny server (frontend server)
+  # (http://www.rstudio.com/products/shiny/shiny-server/)
+  # Shiny server is only installed on frontend.example.com, our designated Shiny server.
+  sudo R -e "install.packages('shiny', repos='http://cran.rstudio.com/')"
+  wget http://download3.rstudio.org/ubuntu-12.04/x86_64/shiny-server-1.3.0.403-amd64.deb
+  sudo gdebi --n shiny-server-1.3.0.403-amd64.deb
+
+  # Rstudio Server (frontend server)
+  # (http://www.rstudio.com/)
+  # Rstudio Server is installed on just the shiny server, frontend.example.com.
+  wget http://download2.rstudio.org/rstudio-server-0.98.1103-amd64.deb -O /tmp/rstudio-server.deb
+  sudo gdebi --n /tmp/rstudio-server.deb
+  rm /tmp/rstudio-server.deb
+
+  # Rstudio Server should now be running on frontend.example.com. Connect to it by browsing to http://frontend.example.com:8787 and logging in as a normal user with accounts on that server. This may require firewall changes.
+fi
+
+
+
+
+# be able to overwrite all the files. yay
+sudo chown ubuntu /etc/hadoop/conf.tessera/*
+
+sudo touch /etc/hadoop/conf.tessera/core-site.xml
+sudo touch /etc/hadoop/conf.tessera/mapred-site.xml
+sudo touch /etc/hadoop/conf.tessera/yarn-site.xml
+sudo touch /etc/hadoop/conf.tessera/masters
+sudo touch /etc/hadoop/conf.tessera/hdfs-site.xml
+
+sudo chown ubuntu /etc/hadoop/conf.tessera/*
+
+
+
+# Configuration
+# Hadoop’s HDFS will use space on the local disks on node002 through node005 to create a single large distributed filesystem. In our example we will say each of node002 through node005 has four 2TB drives per node, for a total of 32TB across the four servers. These local drives must be already been formatted by Linux as normal Linux filesystems (ext4, ext3, etc.). We will further say these filesystems have been mounted with the same mount point locations on all nodes: /hadoop/disk1, /hadoop/disk2, /hadoop/disk3, and /hadoop/disk4. HDFS actually permits different sized drives and different numbers of drives on each server, but doing so requires each server to have an individually maintained hdfs-site.xml file, described later. If possible, keep the number of drives the same on each node for easier administration. The names of the mount points aren’t special and could be anything, but these are the names we will use in this example. HDFS creates its own directory structure and files within the drives that are part of HDFS. If one were to look inside one of these filesystems after Hadoop is running and files have been written to HDFS, one would see a file and directory structure with computer generated directory names and filenames that don’t correspond in any way to their HDFS filenames (eg. blk_1073742354, blk_1073742354_1530.meta, etc.). Access to these files must be made through Hadoop. Paths to files in HDFS begin with ‘/’ just as they do on a normal Linux filesystem, but the namespace is completely independent from all other files on the nodes. This means the directory /tmp on HDFS is completely different from the normal /tmp visible at a bash prompt. Some paths in the configuration below are in the Linux filesystem namespace an some are in the HDFS filesystem namespace.
+#
+# The frontend server does not directly participate in Hadoop computation, HDFS storage, etc. but it must have knowledge of the Hadoop configuration in order to interact with Hadoop. Thus all Hadoop configuration files must exist on the frontend in addition to the nodeNNN servers.
+#
+# The amount of RAM per node must be known for some configuration settings, so lets say we have 64GB per node in our example configuration. We will say each node has 16 CPU cores.
+#
+
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# TO BE DONE BY SYS ADMIN!!!!!!!!!!!!
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#
+# sudo cat <<EOF >> /etc/hosts
+#
+# # tessera hadoop
+# 118.138.246.99 tessera.erc.monash.edu.au tessera
+# 118.138.246.101 tessera-wn1.erc.monash.edu.au tessera-wn1
+# 118.138.246.102 tessera-wn2.erc.monash.edu.au tessera-wn2
+# 118.138.246.103 tessera-wn3.erc.monash.edu.au tessera-wn3
+# EOF
+
+# # 10.0.0.001 node001.example.com node001
+# # 10.0.0.002 node002.example.com node002
+# # 10.0.0.003 node003.example.com node003
+# # 10.0.0.004 node004.example.com node004
+# # 10.0.0.005 node005.example.com node005
+# # 10.0.0.006 frontend.example.com frontend
+
+
+# Hadoop core-site.xml
+# The core-site.xml file is placed in /etc/hadoop/conf.tessera on every server in the cluster (nodeNNN and frontend). If a change is ever made to this config file, it must be made to that file on every node in the cluster as well.
+# sudo mkdir -p /etc/hadoop
+sudo cat <<EOF > /etc/hadoop/conf.tessera/core-site.xml
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<configuration>
+  <property>
+    <!-- This is the NameNode -->
+    <name>fs.defaultFS</name>
+    <value>hdfs://tessera.erc.monash.edu.au:8020</value>
+  </property>
+</configuration>
+EOF
+
+
+# Hadoop mapred-site.xml
+# The mapred-site.xml file in in /etc/hadoop/conf.tessera is configured to tell Hadoop we are using the MRv2 / YARN framework. This file should be copied to all servers (nodeNNN and frontend).
+
+sudo cat <<EOF > /etc/hadoop/conf.tessera/mapred-site.xml
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<configuration>
+  <property>
+    <name>mapreduce.framework.name</name>
+    <value>yarn</value>
+  </property>
+  <property>
+    <name>mapreduce.map.memory.mb</name>
+    <value>2048</value>
+  </property>
+  <property>
+    <name>mapreduce.reduce.memory.mb</name>
+    <value>2048</value>
+  </property>
+</configuration>
+EOF
+
+
+
+# Hadoop yarn-site.xml
+# The yarn-site.xml file in in /etc/hadoop/conf.tessera is used to configure Hadoop settings related to temporary storage, number of CPU cores to use per node, memory per node, etc. This file should be copied to all servers (nodeNNN and frontend). Changes to this file can have significant performance impact, such as running 16 tasks per node rather than running 2 per node. Tuning these settings optimally is beyond the scope of this guide. In our example cluster, the hardware configuration of all nodes is identical, thus the same yarn-site.xml file can be copied around to all nodes. If in your configuration you have some nodes with different amounts of RAM or different numbers of CPU cores, they must have an individually maintained and updated yarn-site.xml file with those settings configured differently.
+
+sudo cat <<'EOF' > /etc/hadoop/conf.tessera/yarn-site.xml
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<configuration>
+  <property>
+    <!-- This should match the name of the resource manager in your local deployment -->
+    <name>yarn.resourcemanager.hostname</name>
+    <value>tessera.erc.monash.edu.au</value>
+  </property>
+
+  <property>
+    <name>yarn.nodemanager.aux-services</name>
+    <value>mapreduce_shuffle</value>
+  </property>
+
+  <property>
+    <!-- How much RAM on this server can be used for Hadoop -->
+    <!-- We will use (total RAM - 2GB).  We have 11.9GB available, so use 10GB -->
+    <name>yarn.nodemanager.resource.memory-mb</name>
+    <value>10240</value>
+  </property>
+
+  <property>
+    <!-- How many CPU cores on this server can be used for Hadoop -->
+    <!-- We will use them all, which is 4 per node in our example cluster -->
+    <name>yarn.nodemanager.resource.cpu-vcores</name>
+    <value>4</value>
+  </property>
+
+  <property>
+    <name>yarn.nodemanager.aux-services.mapreduce_shuffle.class</name>
+    <value>org.apache.hadoop.mapred.ShuffleHandler</value>
+  </property>
+
+  <property>
+    <name>yarn.resourcemanager.scheduler.class</name>
+    <value>org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FairScheduler</value>
+  </property>
+
+  <property>
+    <name>yarn.log-aggregation-enable</name>
+    <value>true</value>
+  </property>
+
+  <property>
+    <!-- List of directories to store temporary localized files. -->
+    <!-- Spread these across all local drives on all nodes -->
+    <name>yarn.nodemanager.local-dirs</name>
+    <!-- <value>file:///mnt/hadoop/disk1/yarn/local,file:///mnt/hadoop/disk2/yarn/local, -->
+    <!--        file:///mnt/hadoop/disk3/yarn/local,file:///mnt/hadoop/disk4/yarn/local</value> -->
+    <value>file:///mnt/hadoop/disk1/yarn/local</value>
+  </property>
+
+  <property>
+    <!-- Where to store temporary container logs. -->
+    <!-- Spread these across all local drives on all nodes -->
+    <name>yarn.nodemanager.log-dirs</name>
+    <!-- <value>file:///mnt/hadoop/disk1/yarn/log,file:///mnt/hadoop/disk2/yarn/log, -->
+    <!--        file:///mnt/hadoop/disk3/yarn/log,file:///mnt/hadoop/disk4/yarn/log</value> -->
+    <value>file:///mnt/hadoop/disk1/yarn/log</value>
+  </property>
+
+  <property>
+    <!-- This should match the name of the NameNode in your local deployment -->
+    <name>yarn.nodemanager.remote-app-log-dir</name>
+    <value>hdfs://tessera.erc.monash.edu.au/var/log/hadoop-yarn/apps</value>
+  </property>
+
+  <property>
+    <name>yarn.application.classpath</name>
+    <value>
+       $HADOOP_CONF_DIR,
+       $HADOOP_COMMON_HOME/*,$HADOOP_COMMON_HOME/lib/*,
+       $HADOOP_HDFS_HOME/*,$HADOOP_HDFS_HOME/lib/*,
+       $HADOOP_MAPRED_HOME/*,$HADOOP_MAPRED_HOME/lib/*,
+       $HADOOP_YARN_HOME/*,$HADOOP_YARN_HOME/lib/*
+    </value>
+  </property>
+</configuration>
+EOF
+
+
+# Hadoop secondary namenode file masters
+# The file /etc/hadoop/conf.tessera/masters must contain the hostname of the secondary namenode. This file should be copied to all servers. For our example, it contains just one line:
+# sudo cat <<EOF > /etc/hadoop/conf.tessera/masters
+# tessera-wn1.erc.monash.edu.au
+# EOF
+sudo cat <<EOF > /etc/hadoop/conf.tessera/masters
+$monashNamenode.erc.monash.edu.au
+EOF
+
+if [ `hostname` = "$monashNamenode" ]
+then
+  sudo cp ./monash_slaves > /etc/hadoop/conf.tessera/slaves
+fi
+
+# Hadoop hdfs-site.xml
+# The hdfs-site.xml file is used to configure the Hadoop file system (HDFS). This file should be copied to the /etc/hadoop/conf.tessera directory on all nodes (nodeNNN and frontend). As with yarn-site.xml, if your number of disks and size of disk varies among nodes, you must independently maintain copies of hdfs-site.xml on each node.
+
+sudo cat <<EOF > /etc/hadoop/conf.tessera/hdfs-site.xml
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<configuration>
+  <property>
+    <!--  Number of times each HDFS block is replicated.  Default is 3. -->
+    <name>dfs.replication</name>
+    <value>3</value>
+  </property>
+
+  <property>
+    <!-- Size in bytes of each HDFS block.  Should be a power of 2. -->
+    <!--  We use 2^27 -->
+    <name>dfs.blocksize</name>
+    <value>134217728</value>
+  </property>
+
+  <!-- Where the namenode stores HDFS metadata on its local drives -->
+  <!-- These are Linux filesystem paths that must already exist. -->
+  <property>
+    <name>dfs.namenode.name.dir</name>
+    <!-- <value>file:///mnt/hadoop/disk1/dfs/nn,file:///mnt/hadoop/disk2/dfs/nn, -->
+    <!--       file:///mnt/hadoop/disk3/dfs/nn,file:///mnt/hadoop/disk4/dfs/nn</value> -->
+    <value>file:///mnt/hadoop/disk1/dfs/nn</value>
+  </property>
+
+  <!-- Where the secondary namenode stores HDFS metadata on its local drives -->
+  <!-- These are Linux filesystem paths that must already exist. -->
+  <property>
+    <name>dfs.namenode.checkpoint.dir</name>
+    <!-- <value>file:///mnt/hadoop/disk1/dfs/nn,file:///mnt/hadoop/disk2/dfs/nn, -->
+    <!--        file:///mnt/hadoop/disk3/dfs/nn,file:///mnt/hadoop/disk4/dfs/nn</value> -->
+    <value>file:///mnt/hadoop/disk1/dfs/nn</value>
+  </property>
+
+  <property>
+    <!-- Where each datanode stores HDFS blocks on its local drives. -->
+    <!-- These are Linux filesystem paths that must already exist. -->
+    <name>dfs.datanode.data.dir</name>
+    <!-- <value>file:///mnt/hadoop/disk1/dfs/dn,file:///mnt/hadoop/disk2/dfs/dn, -->
+    <!--        file:///mnt/hadoop/disk3/dfs/dn,file:///mnt/hadoop/disk4/dfs/dn</value> -->
+    <value>file:///mnt/hadoop/disk1/dfs/dn</value>
+  </property>
+
+  <property>
+    <!-- This should match the name of the NameNode in your local deployment -->
+    <name>dfs.namenode.http-address</name>
+    <value>tessera.erc.monash.edu.au:50070</value>
+  </property>
+
+  <property>
+     <name>dfs.permissions.superusergroup</name>
+     <value>hadoop</value>
+  </property>
+  <property>
+    <name>dfs.client.read.shortcircuit</name>
+    <value>true</value>
+  </property>
+  <property>
+    <name>dfs.client.read.shortcircuit.streams.cache.size</name>
+    <value>1000</value>
+  </property>
+  <property>
+    <name>dfs.client.read.shortcircuit.streams.cache.expiry.ms</name>
+    <value>10000</value>
+  </property>
+
+  <property>
+    <!-- Leave the dn._PORT as is, do not try to make this a number -->
+    <name>dfs.domain.socket.path</name>
+    <value>/var/run/hadoop-hdfs/dn._PORT</value>
+  </property>
+</configuration>
+EOF
+
+# We must pre-create the local metadata storage directories on the NameNode (node001), and on the Secondary NameNode (node002):
+if [ `hostname` = "$monashNamenode" ]
+then
+  sudo mkdir -p /mnt/hadoop/disk1/dfs/nn
+elif [ `hostname` = "$monashSecondaryNamenode" ]
+then
+  sudo mkdir -p /mnt/hadoop/disk1/dfs/nn
+fi
+
+if [ `hostname` = "$monashFrontend" ]
+then
+  echo "do nothing" > /dev/null
+else
+  sudo mkdir -p /mnt/hadoop/disk1/dfs/dn
+  sudo chown -R hdfs.hdfs /mnt/hadoop/disk1/dfs
+  sudo chmod 700 /mnt/hadoop/disk1/dfs
+
+  # We must pre-create the local storage directories on the datanodes, node002 through node005:
+  sudo mkdir -p /mnt/hadoop/disk1/yarn/local
+  sudo mkdir -p /mnt/hadoop/disk1/yarn/log
+  sudo chown -R yarn.yarn /mnt/hadoop/disk1/yarn/local
+  sudo chown -R yarn.yarn /mnt/hadoop/disk1/yarn/log
+fi
+
+
+# wait unti all have finished up to here
+
+
+# Hadoop Pre-run Setup
+# At this point the configuration files created in /etc/hadoop/conf.tessera on node001 should be copied to all other nodes. Any future changes to any configuration files should be done on node001 and then copied from there to all other nodes.
+# Note: In the event that some nodes have different number of drives, or the paths to those drives differ, or they have a different number of CPUs, different amounts of RAM, etc. then separate, independent hdfs-site.xml and yarn-site.xml files may be necessary on each node.
+
+if [ `hostname` = "$monashNamenode" ]
+then
+  # Next we format the new HDFS filesystem before actually starting the NameNode service for the first time. This is done on the NameNode (node001) only. It must be done as the user “hdfs”:
+  sudo -u hdfs hdfs namenode -format
+
+  # Manually start hdfs first by starting the NameNode service on node001:
+  sudo service hadoop-hdfs-namenode start
+elif [ `hostname` = "$monashSecondaryNamenode" ]
+then
+  # manually start secondary name node
+  sudo service hadoop-hdfs-secondarynamenode start
+fi
+
+# Then start the datanode service on node002 - node005 by typing this on each of them one at a time:
+if [ `hostname` = "$monashFrontend" ]
+then
+  echo "do nothing" > /dev/null
+else
+  sudo service hadoop-hdfs-datanode start
+fi
+
+
+
+# wait unti all have finished up to here
+
+
+
+if [ `hostname` = "$monashNamenode" ]
+then
+
+  # Once the NameNode service is running on node001 and the DataNode service is running on the other nodes, it is time to create new folders in HDFS for Hadoop to use and set permissions correctly. Note these are HDFS paths, NOT normal Linux filesystem paths:
+
+  sudo -u hdfs hadoop fs -mkdir -p /tmp/hadoop-yarn/staging
+  sudo -u hdfs hadoop fs -chmod -R 1777 /tmp
+  sudo -u hdfs hadoop fs -mkdir -p /user/history
+  sudo -u hdfs hadoop fs -chmod -R 1777 /user/history
+  sudo -u hdfs hadoop fs -chown mapred:hadoop /user/history
+  sudo -u hdfs hadoop fs -mkdir -p /var/log/hadoop-yarn
+  sudo -u hdfs hadoop fs -chown yarn:mapred /var/log/hadoop-yarn
+
+  # The administrator much make some choices about where users will be storing their files, what permissions should exist on the /user directory, etc. If privacy is important, the administrator must create user directories in HDFS individually for every user on the system and set the permissions on those directories accordingly. For example, to create a private storage location for users joe and bob, the adminsitrator would type:
+  # sudo -u hdfs hadoop fs -mkdir /user/joe /user/bob
+  # sudo -u hdfs hadoop fs -chown joe /user/joe
+  # sudo -u hdfs hadoop fs -chown bob /user/bob
+  # sudo -u hdfs hadoop fs -chmod  700 /user/joe /user/bob
+  # This would permit joe and only joe to read, write, and create files in /user/joe. Only bob could read, write, and create files in /user/bob.
+
+  # In a research group where all users are permitted to see files created by all other users, the easiest approach is just to set permissions such that anyone can create new directories inside the /user directory themselves. To do this, the administrator would set the permissions like this:
+  sudo -u hdfs hadoop fs -chmod 1777 /user
+  # Then an individual user, like bob, could create his own directory where he can store data, rather than having the adminsitrator create directories for everyone individually. Bob could just log into the frontend server and type this himself:
+  # hadoop fs -mkdir /user/barret
+
+
+
+
+
+  # # Starting the Hadoop Cluster
+  # # Configuration settings and environment varaibles have been changed such that rebooting all servers should cause all Hadoop services to automatically start and the environment to be correctly set for all new logins. Do that now by rebooting node001 through node005, and the frontend server, by typing this on each node:
+  # sudo reboot
+
+
+  # Checking the status of the Hadoop Cluster
+  # You can see the status of the ResourceManager, the jobs that are running, have been completed, etc. by browsing to http://tessera.erc.monash.edu.au:8088. This may require firewall settings to be adjusted before this is visible to your browser. Clicking on the Nodes link in the left sidebar should show that node002 through node005 are running and reporting in.
+  #
+  # To see the status of HDFS, which nodes are up, how much space is used and available, etc., browse to http://tessera.erc.monash.edu.au:50070. This may also require firewall settings to be adjusted before this is visible to your browser. Clicking the Datanodes link should show that node002 through node005 are running and reoprting in.
+
+
+
+  # Notes
+  # RAID and Redundancy Design under Hadoop/HDFS
+  # RAID configurations are usually not recommended for HDFS data drives. HDFS already handles fault tolerance by distributing the blocks it writes to local drives among all nodes for both performance and redundancy. RAID won’t improve performance, and could even slow things down. In some configurations it will reduce overall HDFS capacity.
+  #
+  # The default block redundancy setting for HDFS is three replicates, as specified by the dfs.replication variable in hdfs-site.xml. This means that each data block is copied to three drives, optimally on three different nodes. Hadoop has shown high availability is possible with three replicates. The downside is the total capacity of HDFS is divided by the number of replicates used. This means our 32 TB example cluster with three replicates can only hold 10.67 TB of data. Decreasing dfs.replication below 3 is not recommended and should be avoided. Increasing it above 3 could increase performance for large clusters under certain workloads, but at the cost of capacity.
+
+
+  # R Package Design
+  # Most R packages can be completely provided by the system administrator by installing them as root, which implicitly places them in a system wide accessible location, for example /usr/lib/R/library or /usr/local/lib64/R/library.
+  #
+  # Alternately, the system administrator can install just the core default R packages at a system wide location and allow individual users to install specific R library packages in their home directory. This permits users the flexibility to easily change versions of packages they are using and update them when they choose.
+
+
+  # RHIPE_HADOOP_TMP_FOLDER environment variable
+  # It has been observed that some versions of Linux, such as Red Hat Enterprise Linux, may have an issue with RHIPE where it will give false errors about being unable to write files in HDFS, even where the directory in question is clearly writable. This can be corrected by creating a directory somewhere in HDFS that is readable only by that user, and then setting the RHIPE_HADOOP_TMP_FOLDER environment variable to point to that HDFS directory. The user bob for example, would type this on frontend:
+  #
+  # hadoop fs -mkdir -p /user/bob/tmp
+  # hadoop fs -chmod 700 /user/bob/tmp
+  # He would then add this to his environment by including it in his .bashrc or .bash_profile, or whatever location is appropriate for his shell:
+  #
+  # export RHIPE_HADOOP_TMP_FOLDER=/user/bob/tmp
+
+
+  # Consider using HDFS High Availability rather than a Secondary NameNode
+  # The primary role of the Secondary NameNode is to perform periodic checkpointing so the NameNode doesn’t have to, which makes reboots of the cluster go much more quickly. The Secondary NameNode could also be used to reconstruct the majority of HDFS if the NameNode were to have a catastrophic failure, but through a manual, imperfect process prone to error. For a more robust, fault tolerant Hadoop configuration, consider using a High Availability HDFS configuration, which uses a Standby NameNode rather than a Secondary NameNode, and can be configured for automatic failover in the event of a NameNode failure. This configuration is more complex, requires the use of Zookeeper, three or more JournalNode hosts (these can be regular nodes), and another node dedicated to act as the Standby NameNode. The documentation at cloudera.com describes this in more detail.
+
+
+
+
+
+
+
+  # Install and Push
+  # If the administrator has not already installed RHIPE, you first first download the package file by typing:
+
+  # wget http://ml.stat.purdue.edu/rhipebin/Rhipe_0.75.1.4_cdh5.tar.gz
+  # Then launch R and type the following to install rJava and RHIPE:
+
+  # install.packages("rJava")
+  # install.packages("Rhipe_0.75.1.4_cdh5.tar.gz", repos=NULL, type="source")
+  # RHIPE is now installed. Each time you start an R session and you want RHIPE to be available, type:
+
+cat <<EOF >> ~/.Rprofile
+if (interactive()) {
+  if (require(Rhipe)) {
+    rhinit()
+    rhoptions(zips = "/user/barret/bin/RhipeLib.tar.gz")
+    rhoptions(runner = "sh ./RhipeLib/library/Rhipe/bin/RhipeMapReduce.sh")
+  }
+}
+EOF
+
+
+# As a one-time configuration step, you push all the R packages you have installed on the R session server, including RHIPE, onto the cluster HDFS. First, you need the system administrator to configure a directory in HDFS that is writable by you. We will assume the administrator has created for you the writable directory /user/loginname using your login name, and has done the same thing for other users. Suppose in /user/loginname you want to create a directory bin on HDFS where you will push your installations on the R session server. You can do this and carry out the push by
+
+# my_folder <- function(folder) {
+#   paste("/user/barret", folder)
+# }
+# rhmkdir(my_folder("/bin"))
+# hdfs.setwd(my_folder("/bin"))
+# bashRhipeArchive("R.Pkg")
+R -e "rhinit(); rhmkdir('/user/barret/bin'); hdfs.setwd('/user/barret/bin'); bashRhipeArchive('RhipeLib')"
+
+
+# run example
+# Example: Housing Data
+# The Data
+# The housing data consist of 7 monthly variables on housing sales from Oct 2008 to Mar 2014, which is 66 months. The measurements are for 2883 counties in 48 U.S. states, excluding Hawaii and Alaska, and also for the District of Columbia which we treat as a state with one county. The data were derived from sales of housing units from Quandl’s Zillow Housing Data (www.quandl.com/c/housing). A housing unit is a house, an apartment, a mobile home, a group of rooms, or a single room that is occupied or intended to be occupied as a separate living quarter.
+#
+# The variables are
+# FIPS: FIPS county code, an unique identifier for each U.S. county
+# county: county name
+# state: state abbreviation
+# date: time of sale measured in months, from 1 to 66
+# units: number of units sold
+# listing: monthly median listing price (dollars per square foot)
+# selling: monthly median selling price (dollars per square foot)
+# Many observations of the last three variables are missing: units 68%, listing 7%, and selling 68%.
+#
+# The number of measurements (including missing), is 7 x 66 x 2883 = 1,331,946. So this is in fact a small dataset that could be analyzed in the standard serial R. However, we can use them to illustrate how RHIPE R commands implement Divide and Recombine. We simply pretend the data are large and complex, break into subsets, and continuing on with D&R. The small size let’s you easily pick up the data, follow along using the R commands in the tutorial, and explore RHIPE yourself with other RHIPE R commands.
+#
+# “housing.txt” is available in our Tesseradata Github repository of the RHIPE documentation, or at:
+wget https://raw.githubusercontent.com/tesseradata/docs-RHIPE/gh-pages/housing.txt
+
+
+# The file is a table with 190,278 rows (66 months x 2883 counties) and 7 columns (the variables). The fields in each row are separated by a comma, and there are no headers in the first line. Here are the first few lines of the file:
+# 01001,Autauga,AL,1,27,96.616541353383,99.1324
+# 01001,Autauga,AL,2,28,96.856993190152,95.8209
+# 01001,Autauga,AL,3,16,98.055555555556,96.3528
+# 01001,Autauga,AL,4,23,97.747480735033,95.2189
+# 01001,Autauga,AL,5,22,97.747480735033,92.7127
+
+# Write housing.txt to the HDFS
+# To get started, we need to make housing.txt available as a text file within the HDFS file system. This puts it in a place where it can be read into R, form subsets, and write the subsets to the HDFS. This is similar to what we do using R in the standard serial way; if we have a text file to read into R, we move put it in a place where we can read it into R, for example, in the working directory of the R session.
+
+# To set this up, the system administrator must do two tasks. On the R session server, set up a home directory where you have write permission; let’s call it /home/loginname. In the HDFS, the administrator does a similar thing, creates, say, /user/loginname which is in the root directory.
+
+# Your first step, as for the standard R case, is to copy housing.txt to a directory on the R-session server where your R session is running. Suppose in your login directory you have created a directory housing for your analysis of the housing data. You can copy housing.txt to
+# "/home/loginname/housing/"
+
+# The next step is to get housing.txt onto the HDFS as a text file, so we can read it into R on the cluster. There are Hadoop commands that could be used directly to copy the file, but our promise to you is that you never need to use Hadoop commands. There is a RHIPE function, rhput() that will do it for you.
+R -e "rhinit(); rhput('./housing.txt', '/user/barret/housing/housing.txt')"
+
+# The rhput() function takes two arguments. The first is the path name of the R server file to be copied. The second argument is the path name HDFS where the file will be written. Note that for the HDFS, in the directory /user/loginname there is a directory housing. You might have created housing already with the command
+
+# rhmkdir("/user/loginname/housing")
+# If not, then rhput() creates the directory for you.
+
+# We can confirm that the housing data text file has been written to the HDFS with the rhexists() function.
+
+R -e "rhinit(); rhexists('/user/barret/housing/housing.txt')"
+# [1] TRUE
+
+# We can use rhls() to get more information about files on the HDFS. It is similar to the Unix command ls. For example,
+
+R -e "rhinit(); rhls('/user/barret/housing')"
+#   permission         owner      group     size          modtime
+# 1 -rw-rw-rw- loginname supergroup 7.683 mb 2014-09-17 11:11
+#                               file
+# /user/loginname/housing/housing.txt
+
+
+fi

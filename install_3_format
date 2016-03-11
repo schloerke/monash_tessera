@@ -1,0 +1,200 @@
+#!/bin/bash
+
+source ./install_0_setup
+
+
+# Hadoop Pre-run Setup
+# At this point the configuration files created in /etc/hadoop/conf.tessera on node001 should be copied to all other nodes. Any future changes to any configuration files should be done on node001 and then copied from there to all other nodes.
+# Note: In the event that some nodes have different number of drives, or the paths to those drives differ, or they have a different number of CPUs, different amounts of RAM, etc. then separate, independent hdfs-site.xml and yarn-site.xml files may be necessary on each node.
+
+if [ `hostname` = "$monashNamenode" ]
+then
+  # Next we format the new HDFS filesystem before actually starting the NameNode service for the first time. This is done on the NameNode (node001) only. It must be done as the user “hdfs”:
+  sudo -u hdfs hdfs namenode -format
+
+  # Manually start hdfs first by starting the NameNode service on node001:
+  sudo service hadoop-hdfs-namenode start
+elif [ `hostname` = "$monashSecondaryNamenode" ]
+then
+  # manually start secondary name node
+  sudo service hadoop-hdfs-secondarynamenode start
+fi
+
+# Then start the datanode service on node002 - node005 by typing this on each of them one at a time:
+if [ `hostname` = "$monashFrontend" ]
+then
+  echo "do nothing" > /dev/null
+else
+  sudo service hadoop-hdfs-datanode start
+fi
+
+
+
+# wait unti all have finished up to here
+
+
+
+if [ `hostname` = "$monashNamenode" ]
+then
+
+  # Once the NameNode service is running on node001 and the DataNode service is running on the other nodes, it is time to create new folders in HDFS for Hadoop to use and set permissions correctly. Note these are HDFS paths, NOT normal Linux filesystem paths:
+
+  sudo -u hdfs hadoop fs -mkdir -p /tmp/hadoop-yarn/staging
+  sudo -u hdfs hadoop fs -chmod -R 1777 /tmp
+  sudo -u hdfs hadoop fs -mkdir -p /user/history
+  sudo -u hdfs hadoop fs -chmod -R 1777 /user/history
+  sudo -u hdfs hadoop fs -chown mapred:hadoop /user/history
+  sudo -u hdfs hadoop fs -mkdir -p /var/log/hadoop-yarn
+  sudo -u hdfs hadoop fs -chown yarn:mapred /var/log/hadoop-yarn
+
+  # The administrator much make some choices about where users will be storing their files, what permissions should exist on the /user directory, etc. If privacy is important, the administrator must create user directories in HDFS individually for every user on the system and set the permissions on those directories accordingly. For example, to create a private storage location for users joe and bob, the adminsitrator would type:
+  # sudo -u hdfs hadoop fs -mkdir /user/joe /user/bob
+  # sudo -u hdfs hadoop fs -chown joe /user/joe
+  # sudo -u hdfs hadoop fs -chown bob /user/bob
+  # sudo -u hdfs hadoop fs -chmod  700 /user/joe /user/bob
+  # This would permit joe and only joe to read, write, and create files in /user/joe. Only bob could read, write, and create files in /user/bob.
+
+  # In a research group where all users are permitted to see files created by all other users, the easiest approach is just to set permissions such that anyone can create new directories inside the /user directory themselves. To do this, the administrator would set the permissions like this:
+  sudo -u hdfs hadoop fs -chmod 1777 /user
+  # Then an individual user, like bob, could create his own directory where he can store data, rather than having the adminsitrator create directories for everyone individually. Bob could just log into the frontend server and type this himself:
+  # hadoop fs -mkdir /user/barret
+
+
+
+
+
+  # # Starting the Hadoop Cluster
+  # # Configuration settings and environment varaibles have been changed such that rebooting all servers should cause all Hadoop services to automatically start and the environment to be correctly set for all new logins. Do that now by rebooting node001 through node005, and the frontend server, by typing this on each node:
+  # sudo reboot
+
+
+  # Checking the status of the Hadoop Cluster
+  # You can see the status of the ResourceManager, the jobs that are running, have been completed, etc. by browsing to http://tessera.erc.monash.edu.au:8088. This may require firewall settings to be adjusted before this is visible to your browser. Clicking on the Nodes link in the left sidebar should show that node002 through node005 are running and reporting in.
+  #
+  # To see the status of HDFS, which nodes are up, how much space is used and available, etc., browse to http://tessera.erc.monash.edu.au:50070. This may also require firewall settings to be adjusted before this is visible to your browser. Clicking the Datanodes link should show that node002 through node005 are running and reoprting in.
+
+
+
+  # Notes
+  # RAID and Redundancy Design under Hadoop/HDFS
+  # RAID configurations are usually not recommended for HDFS data drives. HDFS already handles fault tolerance by distributing the blocks it writes to local drives among all nodes for both performance and redundancy. RAID won’t improve performance, and could even slow things down. In some configurations it will reduce overall HDFS capacity.
+  #
+  # The default block redundancy setting for HDFS is three replicates, as specified by the dfs.replication variable in hdfs-site.xml. This means that each data block is copied to three drives, optimally on three different nodes. Hadoop has shown high availability is possible with three replicates. The downside is the total capacity of HDFS is divided by the number of replicates used. This means our 32 TB example cluster with three replicates can only hold 10.67 TB of data. Decreasing dfs.replication below 3 is not recommended and should be avoided. Increasing it above 3 could increase performance for large clusters under certain workloads, but at the cost of capacity.
+
+
+  # R Package Design
+  # Most R packages can be completely provided by the system administrator by installing them as root, which implicitly places them in a system wide accessible location, for example /usr/lib/R/library or /usr/local/lib64/R/library.
+  #
+  # Alternately, the system administrator can install just the core default R packages at a system wide location and allow individual users to install specific R library packages in their home directory. This permits users the flexibility to easily change versions of packages they are using and update them when they choose.
+
+
+  # RHIPE_HADOOP_TMP_FOLDER environment variable
+  # It has been observed that some versions of Linux, such as Red Hat Enterprise Linux, may have an issue with RHIPE where it will give false errors about being unable to write files in HDFS, even where the directory in question is clearly writable. This can be corrected by creating a directory somewhere in HDFS that is readable only by that user, and then setting the RHIPE_HADOOP_TMP_FOLDER environment variable to point to that HDFS directory. The user bob for example, would type this on frontend:
+  #
+  # hadoop fs -mkdir -p /user/bob/tmp
+  # hadoop fs -chmod 700 /user/bob/tmp
+  # He would then add this to his environment by including it in his .bashrc or .bash_profile, or whatever location is appropriate for his shell:
+  #
+  # export RHIPE_HADOOP_TMP_FOLDER=/user/bob/tmp
+
+
+  # Consider using HDFS High Availability rather than a Secondary NameNode
+  # The primary role of the Secondary NameNode is to perform periodic checkpointing so the NameNode doesn’t have to, which makes reboots of the cluster go much more quickly. The Secondary NameNode could also be used to reconstruct the majority of HDFS if the NameNode were to have a catastrophic failure, but through a manual, imperfect process prone to error. For a more robust, fault tolerant Hadoop configuration, consider using a High Availability HDFS configuration, which uses a Standby NameNode rather than a Secondary NameNode, and can be configured for automatic failover in the event of a NameNode failure. This configuration is more complex, requires the use of Zookeeper, three or more JournalNode hosts (these can be regular nodes), and another node dedicated to act as the Standby NameNode. The documentation at cloudera.com describes this in more detail.
+
+
+
+
+
+
+
+  # Install and Push
+  # If the administrator has not already installed RHIPE, you first first download the package file by typing:
+
+  # wget http://ml.stat.purdue.edu/rhipebin/Rhipe_0.75.1.4_cdh5.tar.gz
+  # Then launch R and type the following to install rJava and RHIPE:
+
+  # install.packages("rJava")
+  # install.packages("Rhipe_0.75.1.4_cdh5.tar.gz", repos=NULL, type="source")
+  # RHIPE is now installed. Each time you start an R session and you want RHIPE to be available, type:
+
+cat <<EOF >> ~/.Rprofile
+if (interactive()) {
+  if (require(Rhipe)) {
+    rhinit()
+    rhoptions(zips = "/user/barret/bin/RhipeLib.tar.gz")
+    rhoptions(runner = "sh ./RhipeLib/library/Rhipe/bin/RhipeMapReduce.sh")
+  }
+}
+EOF
+
+
+# As a one-time configuration step, you push all the R packages you have installed on the R session server, including RHIPE, onto the cluster HDFS. First, you need the system administrator to configure a directory in HDFS that is writable by you. We will assume the administrator has created for you the writable directory /user/loginname using your login name, and has done the same thing for other users. Suppose in /user/loginname you want to create a directory bin on HDFS where you will push your installations on the R session server. You can do this and carry out the push by
+
+# my_folder <- function(folder) {
+#   paste("/user/barret", folder)
+# }
+# rhmkdir(my_folder("/bin"))
+# hdfs.setwd(my_folder("/bin"))
+# bashRhipeArchive("R.Pkg")
+R -e "rhinit(); rhmkdir('/user/barret/bin'); hdfs.setwd('/user/barret/bin'); bashRhipeArchive('RhipeLib')"
+
+
+# run example
+# Example: Housing Data
+# The Data
+# The housing data consist of 7 monthly variables on housing sales from Oct 2008 to Mar 2014, which is 66 months. The measurements are for 2883 counties in 48 U.S. states, excluding Hawaii and Alaska, and also for the District of Columbia which we treat as a state with one county. The data were derived from sales of housing units from Quandl’s Zillow Housing Data (www.quandl.com/c/housing). A housing unit is a house, an apartment, a mobile home, a group of rooms, or a single room that is occupied or intended to be occupied as a separate living quarter.
+#
+# The variables are
+# FIPS: FIPS county code, an unique identifier for each U.S. county
+# county: county name
+# state: state abbreviation
+# date: time of sale measured in months, from 1 to 66
+# units: number of units sold
+# listing: monthly median listing price (dollars per square foot)
+# selling: monthly median selling price (dollars per square foot)
+# Many observations of the last three variables are missing: units 68%, listing 7%, and selling 68%.
+#
+# The number of measurements (including missing), is 7 x 66 x 2883 = 1,331,946. So this is in fact a small dataset that could be analyzed in the standard serial R. However, we can use them to illustrate how RHIPE R commands implement Divide and Recombine. We simply pretend the data are large and complex, break into subsets, and continuing on with D&R. The small size let’s you easily pick up the data, follow along using the R commands in the tutorial, and explore RHIPE yourself with other RHIPE R commands.
+#
+# “housing.txt” is available in our Tesseradata Github repository of the RHIPE documentation, or at:
+wget https://raw.githubusercontent.com/tesseradata/docs-RHIPE/gh-pages/housing.txt
+
+
+# The file is a table with 190,278 rows (66 months x 2883 counties) and 7 columns (the variables). The fields in each row are separated by a comma, and there are no headers in the first line. Here are the first few lines of the file:
+# 01001,Autauga,AL,1,27,96.616541353383,99.1324
+# 01001,Autauga,AL,2,28,96.856993190152,95.8209
+# 01001,Autauga,AL,3,16,98.055555555556,96.3528
+# 01001,Autauga,AL,4,23,97.747480735033,95.2189
+# 01001,Autauga,AL,5,22,97.747480735033,92.7127
+
+# Write housing.txt to the HDFS
+# To get started, we need to make housing.txt available as a text file within the HDFS file system. This puts it in a place where it can be read into R, form subsets, and write the subsets to the HDFS. This is similar to what we do using R in the standard serial way; if we have a text file to read into R, we move put it in a place where we can read it into R, for example, in the working directory of the R session.
+
+# To set this up, the system administrator must do two tasks. On the R session server, set up a home directory where you have write permission; let’s call it /home/loginname. In the HDFS, the administrator does a similar thing, creates, say, /user/loginname which is in the root directory.
+
+# Your first step, as for the standard R case, is to copy housing.txt to a directory on the R-session server where your R session is running. Suppose in your login directory you have created a directory housing for your analysis of the housing data. You can copy housing.txt to
+# "/home/loginname/housing/"
+
+# The next step is to get housing.txt onto the HDFS as a text file, so we can read it into R on the cluster. There are Hadoop commands that could be used directly to copy the file, but our promise to you is that you never need to use Hadoop commands. There is a RHIPE function, rhput() that will do it for you.
+R -e "rhinit(); rhput('./housing.txt', '/user/barret/housing/housing.txt')"
+
+# The rhput() function takes two arguments. The first is the path name of the R server file to be copied. The second argument is the path name HDFS where the file will be written. Note that for the HDFS, in the directory /user/loginname there is a directory housing. You might have created housing already with the command
+
+# rhmkdir("/user/loginname/housing")
+# If not, then rhput() creates the directory for you.
+
+# We can confirm that the housing data text file has been written to the HDFS with the rhexists() function.
+
+R -e "rhinit(); rhexists('/user/barret/housing/housing.txt')"
+# [1] TRUE
+
+# We can use rhls() to get more information about files on the HDFS. It is similar to the Unix command ls. For example,
+
+R -e "rhinit(); rhls('/user/barret/housing')"
+#   permission         owner      group     size          modtime
+# 1 -rw-rw-rw- loginname supergroup 7.683 mb 2014-09-17 11:11
+#                               file
+# /user/loginname/housing/housing.txt
+
+
+fi
