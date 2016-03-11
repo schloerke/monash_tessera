@@ -21,14 +21,8 @@ str(housing)
 # We create many plots throughout the course of analysis, and with Trelliscope, we can store these in a “visualization database” (VDB), which is a directory on our computer where all of the information about our display artifacts is stored. Typically we will set up a single VDB for each project we are working on. To initialize and connect to a VDB, we call the vdbConn() function with the path where our VDB is located (or where we would like it to be located), and optionally give it a name.
 
 # connect to a "visualization database"
-conn <- vdbConn("vdb", name = "tesseraTutorial", autoYes = TRUE)
+conn <- vdbConn("vdb_tessera_tuturial", name = "tesseraTutorial", autoYes = TRUE)
 
-# # http://tessera.io/docs-datadr/#large_hdfs_rhipe
-# library(Rhipe); rhinit()
-conn <- hdfsConn("/user/barret/tmp/housing", autoYes = TRUE)
-addData(conn, housing)
-housingDdf <- ddf(conn)
-housingDdf
 
 # This connects to a directory called "vdb" relative to our current working directory. The first time you do this it will ask to make sure you want to create the directory. R holds this connection in its global options so that subsequent calls will know where to put things without explicitly specifying the connection each time.
 
@@ -142,8 +136,8 @@ makeDisplay(byCounty,
    desc = "List and sold price over time",
    panelFn = timePanel,
    cogFn = priceCog,
-   width = 400, height = 400,
-   lims = list(x = "same"))
+   width = 400, height = 400
+)
 # This creates a new entry in our visualization database and stores all of the appropriate information for the Trelliscope viewer to know how to construct the panels.
 
 # If you have been dutifully following along with this example in your own R console, you can now view the display with the following:

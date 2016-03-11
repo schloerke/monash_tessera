@@ -1,5 +1,6 @@
 
 
+# Rhipe is loaded when R is loaded
 
 
 map1 <- expression({
@@ -79,3 +80,34 @@ CountyStats <- rhwatch(
   output   = rhfmt("/user/barret/housing/countyStats", type = "sequence"),
   readback = TRUE
 )
+
+###########################################################################
+
+library(datadr)
+conn <- hdfsConn("/user/barret/housing/byCounty")
+
+# addData(conn, housing)
+housingDdf <- ddf(conn)
+housingDdf
+housingDdf <- updateAttributes(housingDdf)
+
+byDate <- divide(
+  housingDdf,
+  by = "date",
+  output = hdfsConn("/user/barret/housing/byDate", autoYes=TRUE),
+  update = TRUE
+)
+
+byDate <- ddf(hdfsConn("/user/barret/housing/byDate"))
+byDate <- fileDisk
+
+
+byDateSummary <- addTransform(byDate, function(x) {
+  data.frame(
+    unitsMin = min(x$units, na.rm = TRUE),
+    unitsMax = max(x$units, na.rm = TRUE),
+    listingMedian = median(x$listing, na.rm = TRUE)
+  )
+})
+# compute lm coefficients for each division and rbind them
+recombine(byDateSummary, combRbind)

@@ -1,9 +1,11 @@
-#!/bin/bash
+#!/bin/bash -e
 
 source ./install_0_setup
 
 
 # be able to overwrite all the files. yay
+sudo chown ubuntu /etc/hosts
+
 sudo chown ubuntu /etc/hadoop/conf.tessera/*
 
 sudo touch /etc/hadoop/conf.tessera/core-site.xml
@@ -27,15 +29,18 @@ sudo chown ubuntu /etc/hadoop/conf.tessera/*
 # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 # TO BE DONE BY SYS ADMIN!!!!!!!!!!!!
 # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# 118.138.247.43 tessera-wn1.erc.monash.edu.au tessera-wn1
+# 118.138.247.46 tessera-wn2.erc.monash.edu.au tessera-wn2
+# 118.138.247.47 tessera-wn3.erc.monash.edu.au tessera-wn3
+
+
 #
-# sudo cat <<EOF >> /etc/hosts
-#
-# # tessera hadoop
-# 118.138.246.99 tessera.erc.monash.edu.au tessera
-# 118.138.246.101 tessera-wn1.erc.monash.edu.au tessera-wn1
-# 118.138.246.102 tessera-wn2.erc.monash.edu.au tessera-wn2
-# 118.138.246.103 tessera-wn3.erc.monash.edu.au tessera-wn3
-# EOF
+sudo cat <<EOF >> /etc/hosts
+118.138.246.99 tessera.erc.monash.edu.au tessera
+118.138.247.43 tessera-wn1.erc.monash.edu.au tessera-wn1
+118.138.247.46 tessera-wn2.erc.monash.edu.au tessera-wn2
+118.138.247.47 tessera-wn3.erc.monash.edu.au tessera-wn2
+EOF
 
 # # 10.0.0.001 node001.example.com node001
 # # 10.0.0.002 node002.example.com node002

@@ -29,37 +29,6 @@ str(housing)
 
 
 
-if (FALSE) {
-  conn <- hdfsConn("/user/barret/housing/byCounty")
-
-  # addData(conn, housing)
-  housingDdf <- ddf(conn)
-  housingDdf
-  housingDdf <- updateAttributes(housingDdf)
-
-  byDate <- divide(
-    housingDdf,
-    by = "date",
-    output = hdfsConn("/user/barret/housing/byDate", autoYes=TRUE),
-    update = TRUE
-  )
-
-  byDate <- ddf(hdfsConn("/user/barret/housing/byDate"))
-  byDate <- fileDisk
-
-
-  byDateSummary <- addTransform(byDate, function(x) {
-    data.frame(
-      unitsMin = min(x$units, na.rm = TRUE),
-      unitsMax = max(x$units, na.rm = TRUE),
-      listingMedian = median(x$listing, na.rm = TRUE)
-    )
-  })
-  # compute lm coefficients for each division and rbind them
-  recombine(byDateSummary, combRbind)
-}
-
-
 # This connects to a directory called "vdb" relative to our current working directory. The first time you do this it will ask to make sure you want to create the directory. R holds this connection in its global options so that subsequent calls will know where to put things without explicitly specifying the connection each time.
 
 # Visualization by county and state
@@ -67,8 +36,13 @@ if (FALSE) {
 
 # An interesting thing to look at with the housing data is the median list and sold price over time by county and state. To split the data in this way, we use the divide() function from the datadr package. It is recommended to have some familiarity with the datadr package.
 
-library(datadr)
-conn <- hdfsConn("/ln/bschloe/monash2/rawHousing", autoYes = TRUE)
+
+
+hdfs_conn <- function(subPath, autoYes = TRUE, ...) {
+  fullPath <- paste("/user/barret/monash/", subPath)
+  hdfsConn(fullPath, autoYes = autoYes, ...)
+}
+conn <- hdfs_conn("rawHousing")
 
 library(housingData)
 addData(conn, list(
@@ -83,15 +57,15 @@ housingDdf
 
 
 # divide housing data by county and state
-byCounty <- divide(
+byCountyDdf <- divide(
   housingDdf,
   by = c("county", "state"),
   # overwrite = TRUE,
-  output = hdfsConn("/ln/bschloe/monash2/byCountyOriginal", autoYes = TRUE),
+  output = hdfs_conn("byCountyOriginal"),
   update = TRUE
 )
-# rhcp("/ln/bschloe/monash2/byCountyOriginal", "/ln/bschloe/monash2/byCounty")
-# byCountyDdf <- ddf(hdfsConn("/ln/bschloe/monash2/byCounty"))
+# rhcp("/user/barret/monash/byCountyOriginal", "/user/barret/monash/byCounty")
+# byCountyDdf <- ddf(hdfsConn("/ln/bschloe/monash/byCounty"))
 # byCountyDdf
 
 # Our byCounty object is now a distributed data frame (ddf), which is simply a data frame split into chunks of key-value pairs. The key defines the split, and the value is the data frame for that split. We can see some of its attributes by printing the object:
@@ -137,15 +111,28 @@ byCountyDdf[[1]]
 
 # create a panel function of list and sold price vs. time
 library(lattice)
-timePanel <- function(x)
-   xyplot(medListPriceSqft + medSoldPriceSqft ~ time,
-      data = x, auto.key = TRUE, ylab = "Price / Sq. Ft.")
+timePanel <- function(x) {
+  xyplot(
+    medListPriceSqft + medSoldPriceSqft ~ time,
+    data = x,
+    auto.key = TRUE,
+    ylab = "Price / Sq. Ft."
+  )
+}
 
 library(ggplot2)
 library(reshape2)
 timePanel <- function(x) {
-  dt <- melt(x[, c("fips", "time", "medListPriceSqft", "medSoldPriceSqft")], c("fips", "time"))
-  qplot(x = time, y = value, data = dt, geom = c("line", "point"), color = variable) +
+  dt <- melt(
+    x[, c("fips", "time", "medListPriceSqft", "medSoldPriceSqft")],
+    c("fips", "time")
+  )
+  qplot(
+    x = time, y = value,
+    data = dt,
+    geom = c("line", "point"),
+    color = variable
+  ) +
     labs(y = "Price / Sq. Ft")
 }
 # Note that you can use most any R plot command here (base R plots, lattice, ggplot, rCharts, ggvis).
@@ -163,18 +150,26 @@ timePanel(byCountyDdf[[20]]$value)
 # create a cognostics function of metrics of interest
 library(trelliscope)
 priceCog <- function(x) {
-   zillowString <- gsub(" ", "-", do.call(paste, getSplitVars(x)))
-   list(
-      slope = cog(coef(lm(medListPriceSqft ~ time, data = x))[2],
-         desc = "list price slope"),
-      meanList = cogMean(x$medListPriceSqft),
-      meanSold = cogMean(x$medSoldPriceSqft),
-      nObs = cog(length(which(!is.na(x$medListPriceSqft))),
-         desc = "number of non-NA list prices"),
-      zillowHref = cogHref(
-         sprintf("http://www.zillow.com/homes/%s_rb/", zillowString),
-         desc = "zillow link")
-   )
+  # do work here!
+  zillowString <- gsub(" ", "-", do.call(paste, getSplitVars(x)))
+
+  # return list of cogs
+  list(
+    slope = cog(
+      coef(lm(medListPriceSqft ~ time, data = x))[2],
+      desc = "list price slope"
+    ),
+    meanList = cogMean(x$medListPriceSqft),
+    meanSold = cogMean(x$medSoldPriceSqft),
+    nObs = cog(
+      length(which(!is.na(x$medListPriceSqft))),
+      desc = "number of non-NA list prices"
+    ),
+    zillowHref = cogHref(
+      sprintf("http://www.zillow.com/homes/%s_rb/", zillowString),
+      desc = "zillow link"
+    )
+  )
 }
 # We use the cog() function to wrap our metrics so that we can provide a description for the cognostic, and we also employ special cognostics functions cogMean() and cogRange() to compute mean and range with a default description.
 
@@ -213,10 +208,19 @@ makeDisplay(
   cogFn = priceCog,
   width = 400, height = 400
 )
+# makeDisplay(...)
+# makeDisplay(...)
+# makeDisplay(...)
+
 # This creates a new entry in our visualization database and stores all of the appropriate information for the Trelliscope viewer to know how to construct the panels.
 
 # If you have been dutifully following along with this example in your own R console, you can now view the display with the following:
 
 
-# vdbConn <- vdbConn("vdb2", autoYes = TRUE)
+vdbConn <- vdbConn("vdb", autoYes = TRUE)
 view(port = 4000, openBrowser = FALSE)
+
+
+# # To load the vdb when you return...
+# vdbConn <- vdbConn("vdb", autoYes = TRUE)
+# view(port = 4000, openBrowser = FALSE)

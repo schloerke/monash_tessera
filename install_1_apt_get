@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -e
 # install script
 
 source ./install_0_setup
@@ -6,8 +6,8 @@ source ./install_0_setup
 # installation instructions provided by: http://tessera.io/docs-install-cluster/install-ubuntu.html#installation
 
 # Perform in install dir
-mkdir z_install
-cd z_install
+# mkdir z_install
+# cd z_install
 
 
 # Installation
@@ -137,6 +137,10 @@ sudo bash -c "cat > /etc/profile.d/hadoop.sh"
 # https://pythonandr.wordpress.com/2015/04/27/upgrading-to-r-3-2-0-on-ubuntu/
 codename=$(lsb_release -c -s)
 echo "deb https://cran.rstudio.com/bin/linux/ubuntu $codename/" | sudo tee -a /etc/apt/sources.list > /dev/null
+
+sudo apt-get update
+sudo apt-get upgrade -y
+
 
 # Also, the Ubuntu archives on CRAN are signed with the key of Michael Rutter <marutter@gmail> with key ID E084DAB9
 sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys E084DAB9
