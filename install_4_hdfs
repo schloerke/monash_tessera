@@ -86,7 +86,7 @@ then
   # install.packages("Rhipe_0.75.1.4_cdh5.tar.gz", repos=NULL, type="source")
   # RHIPE is now installed. Each time you start an R session and you want RHIPE to be available, type:
 
-cat <<EOF >> ~/.Rprofile
+cat <<EOF > ~/.Rprofile
 if (interactive()) {
   if (require(Rhipe)) {
     rhinit()
