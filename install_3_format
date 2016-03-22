@@ -9,17 +9,18 @@ source ./install_0_setup
 
 if [ `hostname` = "$monashNamenode" ]
 then
-  # make sure things are shut off
-  sudo service hadoop-hdfs-namenode stop
-  sudo service hadoop-hdfs-datanode stop
 
   # Next we format the new HDFS filesystem before actually starting the NameNode service for the first time. This is done on the NameNode (node001) only. It must be done as the user “hdfs”:
   sudo -u hdfs hdfs namenode -format
 
+  # make sure things are shut off
+  sudo service hadoop-hdfs-namenode stop
   # Manually start hdfs first by starting the NameNode service on node001:
   sudo service hadoop-hdfs-namenode start
 elif [ `hostname` = "$monashSecondaryNamenode" ]
 then
+  # make sure things are shut off
+  sudo service hadoop-hdfs-secondarynamenode stop
   # manually start secondary name node
   sudo service hadoop-hdfs-secondarynamenode start
 fi
@@ -29,6 +30,9 @@ if [ `hostname` = "$monashFrontend" ]
 then
   echo "do nothing" > /dev/null
 else
+  # make sure things are shut off
+  sudo service hadoop-hdfs-datanode stop
+  # manually start data node
   sudo service hadoop-hdfs-datanode start
 fi
 
