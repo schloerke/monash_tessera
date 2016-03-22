@@ -151,7 +151,7 @@ sudo cat <<EOF > /etc/hadoop/conf.tessera/yarn-site.xml
   <property>
     <!-- This should match the name of the NameNode in your local deployment -->
     <name>yarn.nodemanager.remote-app-log-dir</name>
-    <value>hdfs://tessera.erc.monash.edu.au/var/log/hadoop-yarn/apps</value>
+    <value>hdfs://$monashNamenode.erc.monash.edu.au/var/log/hadoop-yarn/apps</value>
   </property>
 EOF
 sudo cat <<'EOF' >> /etc/hadoop/conf.tessera/yarn-site.xml
@@ -233,7 +233,7 @@ sudo cat <<EOF > /etc/hadoop/conf.tessera/hdfs-site.xml
   <property>
     <!-- This should match the name of the NameNode in your local deployment -->
     <name>dfs.namenode.http-address</name>
-    <value>tessera.erc.monash.edu.au:50070</value>
+    <value>$monashNamenode.erc.monash.edu.au:50070</value>
   </property>
 
   <property>
