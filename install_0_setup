@@ -5,3 +5,4 @@
 export monashFrontend='tessera'
 export monashNamenode='tessera-wn1'
 export monashSecondaryNamenode='tessera-wn2'
+export HADOOP_DISK_LOCATION=/mnt/hadoop/disk1
