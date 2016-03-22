@@ -36,11 +36,7 @@ do
   "
   ssh $SERVER 'mkdir ~/z_install'
   scp ./monash_slaves $SERVER:z_install/monash_slaves
-  scp ./install_0_setup $SERVER:z_install/install_0_setup
-  scp ./install_1_apt_get $SERVER:z_install/install_1_apt_get
-  scp ./install_2_hadoop $SERVER:z_install/install_2_hadoop
-  scp ./install_3_format $SERVER:z_install/install_3_format
-  scp ./install_4_hdfs $SERVER:z_install/install_4_hdfs
+  scp ./install_* $SERVER:z_install/
 
   ssh $SERVER 'cd z_install; source install_1_apt_get'
 done
