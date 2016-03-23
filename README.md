@@ -24,6 +24,19 @@ SERVERS="monash tessera-wn1 tessera-wn2 tessera-wn3"
 
 for SERVER in $SERVERS;
 do
+  echo "Copying files to Server: $SERVER
+
+  "
+  ssh $SERVER 'mkdir ~/z_install'
+  scp ./monash_slaves $SERVER:z_install/monash_slaves
+  scp ./install_* $SERVER:z_install/
+
+  ssh $SERVER 'cd z_install; source install_1_apt_get'
+done
+
+
+for SERVER in $SERVERS;
+do
   echo "
 
 
@@ -34,10 +47,6 @@ do
   echo "Installing Server: $SERVER
 
   "
-  ssh $SERVER 'mkdir ~/z_install'
-  scp ./monash_slaves $SERVER:z_install/monash_slaves
-  scp ./install_* $SERVER:z_install/
-
   ssh $SERVER 'cd z_install; source install_1_apt_get'
 done
 
