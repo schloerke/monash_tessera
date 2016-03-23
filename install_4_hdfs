@@ -88,16 +88,6 @@ then
   # install.packages("Rhipe_0.75.1.4_cdh5.tar.gz", repos=NULL, type="source")
   # RHIPE is now installed. Each time you start an R session and you want RHIPE to be available, type:
 
-cat <<EOF > ~/.Rprofile
-if (interactive()) {
-  if (require(Rhipe)) {
-    rhinit()
-    rhoptions(zips = "/user/barret/bin/RhipeLib.tar.gz")
-    rhoptions(runner = "sh ./RhipeLib/library/Rhipe/bin/RhipeMapReduce.sh")
-  }
-}
-EOF
-
 
 # As a one-time configuration step, you push all the R packages you have installed on the R session server, including RHIPE, onto the cluster HDFS. First, you need the system administrator to configure a directory in HDFS that is writable by you. We will assume the administrator has created for you the writable directory /user/loginname using your login name, and has done the same thing for other users. Suppose in /user/loginname you want to create a directory bin on HDFS where you will push your installations on the R session server. You can do this and carry out the push by
 
