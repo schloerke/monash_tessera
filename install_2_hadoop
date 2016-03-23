@@ -261,8 +261,15 @@ sudo cat <<EOF > /etc/hadoop/conf.tessera/hdfs-site.xml
     <name>dfs.domain.socket.path</name>
     <value>/var/run/hadoop-hdfs/dn._PORT</value>
   </property>
+
 </configuration>
 EOF
+
+# <!-- http://stackoverflow.com/questions/25135183/hadoop-binding-multiple-ip-addresses-to-a-cluster-namenode -->
+# <property>
+#   <name>dfs.namenode.rpc-bind-host</name>
+#   <value>0.0.0.0</value>
+# </property>
 
 
 sudo rm -rf $HADOOP_DISK_LOCATION
