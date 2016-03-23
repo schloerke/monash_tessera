@@ -39,7 +39,7 @@ str(housing)
 
 
 hdfs_conn <- function(subPath, autoYes = TRUE, ...) {
-  fullPath <- paste("/user/barret/monash/", subPath)
+  fullPath <- paste("/user/barret/monash/", subPath, sep = "")
   hdfsConn(fullPath, autoYes = autoYes, ...)
 }
 conn <- hdfs_conn("rawHousing")
