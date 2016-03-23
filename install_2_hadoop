@@ -287,6 +287,7 @@ else
 
   # We must pre-create the local storage directories on the datanodes, node002 through node005:
   sudo mkdir -p $HADOOP_DISK_LOCATION/yarn/local
+  sudo mkdir -p $HADOOP_DISK_LOCATION/yarn/local/filecache
   sudo mkdir -p $HADOOP_DISK_LOCATION/yarn/log
   sudo chown -R yarn.yarn $HADOOP_DISK_LOCATION/yarn/local
   sudo chown -R yarn.yarn $HADOOP_DISK_LOCATION/yarn/log
