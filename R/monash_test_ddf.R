@@ -44,7 +44,6 @@ hdfs_conn <- function(subPath, autoYes = TRUE, ...) {
 }
 conn <- hdfs_conn("rawHousing")
 
-library(housingData)
 addData(conn, list(
   list("key1", housing)
 ))
