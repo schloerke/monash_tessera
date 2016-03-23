@@ -8,6 +8,9 @@ source ./install_0_setup
 if [ `hostname` = "$monashNamenode" ]
 then
 
+  # so R knows where the HADOOP env vars are
+  source /etc/profile.d/hadoop.sh
+
   # Once the NameNode service is running on node001 and the DataNode service is running on the other nodes, it is time to create new folders in HDFS for Hadoop to use and set permissions correctly. Note these are HDFS paths, NOT normal Linux filesystem paths:
 
   sudo -u hdfs hadoop fs -mkdir -p /tmp/hadoop-yarn/staging
