@@ -43,45 +43,8 @@ mr1 <- rhwatch(
 
 
 
-##########################################################################
-
-
-map2 <- expression({
-  lapply(seq_along(map.keys), function(r) {
-    outputvalue <- data.frame(
-      FIPS = map.keys[[r]],
-      county = attr(map.values[[r]], "location")["county"],
-      min = min(map.values[[r]]$listing, na.rm = TRUE),
-      median = median(map.values[[r]]$listing, na.rm = TRUE),
-      max = max(map.values[[r]]$listing, na.rm = TRUE),
-      stringsAsFactors = FALSE
-    )
-    outputkey <- attr(map.values[[r]], "location")["state"]
-    rhcollect(outputkey, outputvalue)
-  })
-})
-
-reduce2 <- expression(
-  pre = {
-    reduceoutputvalue <- data.frame()
-  },
-  reduce = {
-    reduceoutputvalue <- rbind(reduceoutputvalue, do.call(rbind, reduce.values))
-  },
-  post = {
-    rhcollect(reduce.key, reduceoutputvalue)
-  }
-)
-
-CountyStats <- rhwatch(
-  map      = map2,
-  reduce   = reduce2,
-  input    = 2^20,
-  output   = rhfmt("/user/barret/housing/countyStats", type = "sequence"),
-  readback = TRUE
-)
-
 ###########################################################################
+
 
 library(datadr)
 conn <- hdfsConn("/user/barret/housing/byCounty")
@@ -98,8 +61,7 @@ byDate <- divide(
   update = TRUE
 )
 
-byDate <- ddf(hdfsConn("/user/barret/housing/byDate"))
-byDate <- fileDisk
+# byDate <- ddf(hdfsConn("/user/barret/housing/byDate"))
 
 
 byDateSummary <- addTransform(byDate, function(x) {
@@ -110,4 +72,23 @@ byDateSummary <- addTransform(byDate, function(x) {
   )
 })
 # compute lm coefficients for each division and rbind them
-recombine(byDateSummary, combRbind)
+dateResults <- recombine(byDateSummary, combRbind)
+
+# install.packages("tidyr")
+library(dplyr)
+dplyr::as_data_frame(dateResults)
+# Source: local data frame [66 x 4]
+#
+#     date unitsMin unitsMax listingMedian
+#    (dbl)    (dbl)    (dbl)         (dbl)
+# 1     66      Inf     -Inf      86.36968
+# 2     65      Inf     -Inf      85.46121
+# 3     64      Inf     -Inf      84.94192
+# 4     63      Inf     -Inf      85.15570
+# 5     62       11    35619      85.31746
+# 6     61       11     7946      86.36034
+# 7     60       11     6937      86.44231
+# 8     59       11     8468      86.27273
+# 9     58       11     9184      86.35314
+# 10    57       11     8464      86.23297
+# ..   ...      ...      ...           ...
