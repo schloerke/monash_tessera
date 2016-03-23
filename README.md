@@ -89,4 +89,17 @@ done
 
 Run the commands in the R folder to see how a distributed calculations could be done.  
 
-Make sure to port forward port 4000 to view the trelliscope server.
+Make sure to port forward port 4000 to view the trelliscope server.  I'd recommend performing one line at a time and exploring each data object along the way.
+
+```
+ssh tessera
+R
+```
+```{r}
+# load housing data and work with datadr
+source("R/monash_test_rhipe_datadr.R")
+
+
+# load housing data and produce a trelliscope view
+source("R/monash_test_trelliscope.R")
+```
